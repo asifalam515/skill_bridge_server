@@ -1,0 +1,191 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+}
+
+enum Role {
+  STUDENT
+  TUTOR
+  ADMIN
+}
+
+model User {
+  id            String     @id
+  name          String
+  email         String
+  role      Role   @default(STUDENT)
+  emailVerified Boolean    @default(false)
+  image         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  status        UserStatus @default(ACTIVE)
+
+  tutorProfile TutorProfile?
+  bookings     Booking[]     @relation("StudentBookings")
+  reviews      Review[]
+
+
+  banned     Boolean?  @default(false)
+  banReason  String?
+  banExpires DateTime?
+
+  @@unique([email])
+  @@map("user")
+}
+
+model TutorProfile {
+  id         String  @id @default(uuid())
+  bio        String
+  pricePerHr Float
+  rating     Float   @default(0)
+  experience Int
+  isVerified Boolean @default(false)
+  isFeatured Boolean @default(false)
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  categories   TutorCategory[]
+  bookings     Booking[]
+  reviews      Review[]
+  availability AvailabilitySlot[]
+
+  createdAt DateTime @default(now())
+}
+
+model Category {
+  id   String @id @default(uuid())
+  name String @unique
+
+  tutors TutorCategory[]
+}
+
+model TutorCategory {
+  tutorId    String
+  categoryId String
+
+  tutor    TutorProfile @relation(fields: [tutorId], references: [id])
+  category Category     @relation(fields: [categoryId], references: [id])
+
+  @@id([tutorId, categoryId])
+}
+
+model AvailabilitySlot {
+  id        String   @id @default(uuid())
+  startTime DateTime
+  endTime   DateTime
+  isBooked  Boolean  @default(false)
+
+  tutorId  String
+  bookings Booking[]
+  tutor    TutorProfile @relation(fields: [tutorId], references: [id])
+  @@unique([tutorId, startTime])
+  @@unique([tutorId, endTime])
+}
+
+model Booking {
+  id     String        @id @default(uuid())
+  status BookingStatus @default(PENDING)
+  date   DateTime
+
+  studentId String
+  tutorId   String
+  slotId    String
+
+  student User             @relation("StudentBookings", fields: [studentId], references: [id])
+  tutor   TutorProfile     @relation(fields: [tutorId], references: [id])
+  slot    AvailabilitySlot @relation(fields: [slotId], references: [id])
+
+  review Review?
+
+  createdAt DateTime @default(now())
+}
+
+model Review {
+  id      String  @id @default(uuid())
+  rating  Int
+  comment String?
+
+  studentId String
+  tutorId   String
+  bookingId String @unique
+
+  student User         @relation(fields: [studentId], references: [id])
+  tutor   TutorProfile @relation(fields: [tutorId], references: [id])
+  booking Booking      @relation(fields: [bookingId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  impersonatedBy String?
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
