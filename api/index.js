@@ -1698,7 +1698,7 @@ var getAllTutorProfiles = async (filters) => {
     completedSessions: tutor._count.bookings,
     // Availability
     availableSlots: tutor.availability.length,
-    nextAvailableSlot: tutor.availability.length > 0 ? tutor.availability[0].startTime : null
+    nextAvailableSlot: tutor.availability.length > 0 ? tutor.availability[0]?.startTime : null
   }));
   return {
     tutors: formattedTutors,
@@ -1886,7 +1886,8 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000",
-      "https://skill-bridge-server-jqrfwzou6-asibul-alams-projects.vercel.app/"
+      "https://skill-bridge-server-jqrfwzou6-asibul-alams-projects.vercel.app/",
+      "https://api-skillbridge-server.onrender.com"
     ],
     credentials: true
   })
