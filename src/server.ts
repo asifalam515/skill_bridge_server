@@ -37,6 +37,8 @@ app.use("/api/v1/bookings", bookingRouter);
 app.use("/api/v1/reviews", reviewRouter);
 // admin related router
 app.use("/api/v1/admin", adminRouter);
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+app.get("/", (req, res) => {
+  res.send("API is running");
 });
+
+export default app;
