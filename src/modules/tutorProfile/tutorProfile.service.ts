@@ -251,7 +251,7 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
     // Availability
     availableSlots: tutor.availability.length,
     nextAvailableSlot:
-      tutor.availability.length > 0 ? tutor.availability[0].startTime : null,
+      tutor.availability.length > 0 ? tutor.availability[0]?.startTime : null,
   }));
 
   return {

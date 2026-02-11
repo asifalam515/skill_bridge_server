@@ -1884,7 +1884,10 @@ var app = express();
 var port = process.env.PORT || 5e3;
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: [
+      "http://localhost:3000",
+      "https://skill-bridge-server-jqrfwzou6-asibul-alams-projects.vercel.app/"
+    ],
     credentials: true
   })
 );
@@ -1900,8 +1903,8 @@ app.use("/api/v1/availability-slots", slotRouter);
 app.use("/api/v1/bookings", bookingRouter);
 app.use("/api/v1/reviews", reviewRouter);
 app.use("/api/v1/admin", adminRouter);
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+app.get("/", (req, res) => {
+  res.send("API is running");
 });
 var server_default = app;
 
