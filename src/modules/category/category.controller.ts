@@ -29,7 +29,23 @@ const createCategoryByAdmin = async (req: Request, res: Response) => {
     });
   }
 };
+const getAllCategory = async (req: Request, res: Response) => {
+  try {
+    const results = await categoryService.getAllCategories();
+    res.status(200).json({
+      success: true,
+      data: results,
+      message: "Retrieved all Category",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve all category",
+    });
+  }
+};
 
 export const categoryController = {
   createCategoryByAdmin,
+  getAllCategory,
 };

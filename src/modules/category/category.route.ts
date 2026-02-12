@@ -8,3 +8,4 @@ categoryRouter.post(
 
   categoryController.createCategoryByAdmin,
 );
+categoryRouter.get("/", categoryController.getAllCategory);

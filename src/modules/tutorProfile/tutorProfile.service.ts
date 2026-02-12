@@ -86,13 +86,10 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
   const skip = (page - 1) * limit;
 
   // Build WHERE clause
-  const where: any = {
-    AND: [],
-  };
-
+  const conditions: any[] = [];
   // Search in bio OR user name
   if (search) {
-    where.AND.push({
+    conditions.push({
       OR: [
         { bio: { contains: search, mode: "insensitive" } },
         { user: { name: { contains: search, mode: "insensitive" } } },
@@ -102,7 +99,7 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
 
   // Filter by categories
   if (categoryIds && categoryIds.length > 0) {
-    where.AND.push({
+    conditions.push({
       categories: {
         some: {
           categoryId: { in: categoryIds },
@@ -113,7 +110,7 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
 
   // Filter by rating
   if (minRating > 0) {
-    where.AND.push({
+    conditions.push({
       rating: { gte: minRating },
     });
   }
@@ -130,21 +127,21 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
   }
 
   if (priceConditions.length > 0) {
-    where.AND.push({
+    conditions.push({
       AND: priceConditions,
     });
   }
 
   // Filter by verification status
   if (isVerified !== undefined) {
-    where.AND.push({ isVerified });
+    conditions.push({ isVerified });
   }
   if (isFeatured !== undefined) {
-    where.AND.push({ isFeatured });
+    conditions.push({ isFeatured });
   }
-
+  const where = conditions.length > 0 ? { AND: conditions } : {};
   // If no conditions, remove AND wrapper
-  if (where.AND.length === 0) {
+  if (conditions.length === 0) {
     delete where.AND;
   }
 
@@ -293,6 +290,12 @@ const getTutorProfileByUserId = async (userId: string) => {
   });
   return tutorProfile;
 };
+const getTutorProfileByTutorId = async (tutorId: string) => {
+  const tutorProfile = await prisma.tutorProfile.findUnique({
+    where: { id: tutorId },
+  });
+  return tutorProfile;
+};
 const updateTutorProfileById = async (
   updatedData: Partial<TutorProfile>,
   tutorProfileId: string,
@@ -314,4 +317,5 @@ export const tutorProfileService = {
   getTutorProfileByUserId,
   updateTutorProfileById,
   deleteTutorProfileById,
+  getTutorProfileByTutorId,
 };
