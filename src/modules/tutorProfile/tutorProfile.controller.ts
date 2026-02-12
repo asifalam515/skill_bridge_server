@@ -99,6 +99,21 @@ const getTutorProfileByUserId = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+const getTutorProfileByTutorProfileId = async (req: Request, res: Response) => {
+  try {
+    const tutorProfileId = req.params.tutorProfileId as string;
+    console.log(tutorProfileId);
+    const tutorProfile =
+      await tutorProfileService.getTutorProfileByTutorId(tutorProfileId);
+    if (!tutorProfile) {
+      return res.status(404).json({ error: "Tutor profile not found" });
+    }
+    res.status(200).json(tutorProfile);
+  } catch (error) {
+    console.error("Error fetching tutor profile:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 const updateTutorProfileById = async (req: Request, res: Response) => {
   try {
     const tutorProfileId = req.params.id as string;
@@ -130,4 +145,5 @@ export const tutorProfileController = {
   getTutorProfileByUserId,
   updateTutorProfileById,
   deleteTutorProfileById,
+  getTutorProfileByTutorProfileId,
 };

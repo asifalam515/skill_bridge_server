@@ -290,9 +290,9 @@ const getTutorProfileByUserId = async (userId: string) => {
   });
   return tutorProfile;
 };
-const getTutorProfileByTutorId = async (tutorId: string) => {
+const getTutorProfileByTutorId = async (tutorProfileId: string) => {
   const tutorProfile = await prisma.tutorProfile.findUnique({
-    where: { id: tutorId },
+    where: { id: tutorProfileId },
   });
   return tutorProfile;
 };
