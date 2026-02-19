@@ -9,3 +9,9 @@ slotRouter.get(
   auth(UserRole.TUTOR, UserRole.STUDENT, UserRole.ADMIN),
   slotController.getAvailabilitySlotsByTutorId,
 );
+
+slotRouter.delete(
+  "/:slotId",
+  auth(UserRole.TUTOR, UserRole.ADMIN),
+  slotController.deleteAvailabilitySlot,
+);

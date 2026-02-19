@@ -295,7 +295,11 @@ const getTutorProfileByTutorId = async (tutorProfileId: string) => {
     where: { id: tutorProfileId },
     include: {
       user: true,
-      categories: true,
+      categories: {
+        include: {
+          category: true,
+        },
+      },
     },
   });
   return tutorProfile;

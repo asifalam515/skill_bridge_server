@@ -21,7 +21,25 @@ const getAvailabilitySlotsByTutorId = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to retrieve availability slots" });
   }
 };
+const deleteAvailabilitySlot = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id as string;
+    const slotId = req.params.slotId as string;
+
+    const slot = await slotService.deleteAvailabilitySlotById(slotId, userId);
+
+    res.status(200).json(slot);
+  } catch (error: any) {
+    console.error("DELETE SLOT ERROR:", error.message);
+
+    res.status(400).json({
+      error: error.message || "Failed to delete availability slots",
+    });
+  }
+};
+
 export const slotController = {
   createTimeSlot,
   getAvailabilitySlotsByTutorId,
+  deleteAvailabilitySlot,
 };
