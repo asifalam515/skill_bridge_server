@@ -102,7 +102,6 @@ const getTutorProfileByUserId = async (req: Request, res: Response) => {
 const getTutorProfileByTutorProfileId = async (req: Request, res: Response) => {
   try {
     const tutorProfileId = req.params.tutorProfileId as string;
-    console.log(tutorProfileId);
     const tutorProfile =
       await tutorProfileService.getTutorProfileByTutorId(tutorProfileId);
     if (!tutorProfile) {

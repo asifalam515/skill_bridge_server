@@ -1,5 +1,12 @@
 import { prisma } from "../../../lib/prisma";
 
+const getAvailabilitySlots = async (tutorId: string) => {
+  const slots = await prisma.availabilitySlot.findMany({
+    where: { tutorId: tutorId },
+  });
+  return slots;
+};
+
 const createTimeSlotService = async (data: any, userId: string) => {
   const tutorId = await prisma.tutorProfile
     .findUnique({
@@ -77,4 +84,5 @@ export const slotService = {
   createTimeSlotService,
   getAvailabilitySlotsByTutorId,
   deleteAvailabilitySlotById,
+  getAvailabilitySlots,
 };

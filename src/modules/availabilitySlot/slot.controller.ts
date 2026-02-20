@@ -1,5 +1,17 @@
 import { Request, Response } from "express";
 import { slotService } from "./slot.service";
+// load slot for students also, so that they can see which slots are available for booking
+const getAvailabilitySlots = async (req: Request, res: Response) => {
+  try {
+    const tutorId = req.params.tutorId as string;
+
+    const slots = await slotService.getAvailabilitySlots(tutorId);
+    res.status(200).json(slots);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Failed to retrieve availability slots" });
+  }
+};
 const createTimeSlot = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id as string;
@@ -42,4 +54,5 @@ export const slotController = {
   createTimeSlot,
   getAvailabilitySlotsByTutorId,
   deleteAvailabilitySlot,
+  getAvailabilitySlots,
 };
