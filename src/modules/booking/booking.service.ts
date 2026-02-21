@@ -1,4 +1,4 @@
-import { BookingStatus } from "../../../generated/prisma/enums";
+import { BookingStatus, Role } from "../../../generated/prisma/enums";
 import { prisma } from "../../../lib/prisma";
 
 export const bookingService = {
@@ -31,11 +31,6 @@ const createBooking = async (studentId: string, slotId: string) => {
 
     if (!slot) {
       throw new Error("Time slot not found or already booked");
-    }
-
-    // 2. Check if slot is in the future
-    if (slot.startTime > new Date()) {
-      throw new Error("Cannot book past time slots");
     }
 
     // 3. Check if student is trying to book themselves (student != tutor)
@@ -96,16 +91,52 @@ const createBooking = async (studentId: string, slotId: string) => {
     return booking;
   });
 };
-const getStudentBookings = async (
-  studentId: string,
+const getBookings = async (
+  userId: string,
+  userRole: Role,
   status?: BookingStatus,
+  filters?: {
+    studentId?: string;
+    tutorId?: string;
+    startDate?: Date;
+    endDate?: Date;
+  },
+  // optionally add other filters like startDate, endDate, tutorId, etc.
 ) => {
+  // Build where condition based on role
+  let where: any = {};
+  if (userRole === "STUDENT") {
+    where.studentId = userId;
+  } else if (userRole === "TUTOR") {
+    // Need to get tutor profile id from userId
+    const tutorProfile = await prisma.tutorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!tutorProfile) {
+      throw new Error("Tutor profile not found");
+    }
+    where.tutorId = tutorProfile.id;
+  } else if (userRole === "ADMIN") {
+    // admin can see all, optionally apply filters
+    // maybe allow filtering by studentId, tutorId, etc. via additional params
+  } else {
+    throw new Error("Invalid user role");
+  }
+
+  // Add status filter if provided
+  if (status) {
+    where.status = status;
+  }
+
+  // Optional: add date range filters if provided as parameters
+
   return await prisma.booking.findMany({
-    where: {
-      studentId,
-      ...(status && { status }),
-    },
+    where,
     include: {
+      student: {
+        select: { id: true, name: true, email: true },
+      },
       tutor: {
         include: {
           user: {
@@ -114,6 +145,7 @@ const getStudentBookings = async (
         },
       },
       slot: true,
+      review: true,
     },
     orderBy: { date: "asc" },
   });
@@ -136,24 +168,56 @@ const getTutorBookings = async (tutorId: string, status?: BookingStatus) => {
 const updateBookingStatus = async (
   bookingId: string,
   userId: string,
+  role: Role,
   status: BookingStatus,
 ) => {
   return await prisma.$transaction(async (tx) => {
-    const tutorId = await tx.tutorProfile
-      .findUnique({
-        where: { userId },
-      })
-      .then((profile) => profile?.id);
-
-    if (!tutorId) throw new Error("Tutor profile not found");
     const booking = await tx.booking.findUnique({
       where: { id: bookingId },
     });
 
     if (!booking) throw new Error("Booking not found");
-    if (booking.tutorId !== tutorId) throw new Error("Not authorized");
 
-    // If rejecting or cancelling, free up the slot
+    // =========================
+    // STUDENT LOGIC
+    // =========================
+    if (role === "STUDENT") {
+      if (booking.studentId !== userId) throw new Error("Not authorized");
+
+      if (status !== "CANCELLED")
+        throw new Error("Students can only cancel bookings");
+    }
+
+    // =========================
+    // TUTOR LOGIC
+    // =========================
+    if (role === "TUTOR") {
+      const tutorProfile = await tx.tutorProfile.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+
+      if (!tutorProfile) throw new Error("Tutor profile not found");
+
+      if (booking.tutorId !== tutorProfile.id)
+        throw new Error("Not authorized");
+
+      // optional restrictions
+      const allowed = ["CONFIRMED", "REJECTED", "COMPLETED"];
+      if (!allowed.includes(status))
+        throw new Error("Invalid status for tutor");
+    }
+
+    // =========================
+    // ADMIN LOGIC
+    // =========================
+    if (role === "ADMIN") {
+      // admin can do anything
+    }
+
+    // =========================
+    // Free slot if cancelled
+    // =========================
     if (status === "CANCELLED") {
       await tx.availabilitySlot.update({
         where: { id: booking.slotId },
@@ -165,8 +229,11 @@ const updateBookingStatus = async (
       where: { id: bookingId },
       data: { status },
       include: {
-        student: {
-          select: { name: true, email: true },
+        student: { select: { name: true, email: true } },
+        tutor: {
+          include: {
+            user: { select: { name: true, email: true } },
+          },
         },
         slot: true,
       },
@@ -214,7 +281,7 @@ const bookingCompletion = async (bookingId: string, studentId: string) => {
 
 export const bookingRelatedService = {
   createBooking,
-  getStudentBookings,
+  getBookings,
   getTutorBookings,
   updateBookingStatus,
   cancelBooking,

@@ -3,11 +3,11 @@ import { auth, UserRole } from "../../middleware/auth";
 import { bookingController } from "./booking.controller";
 
 export const bookingRouter = Router();
-// student routes
+
 bookingRouter.get(
   "/",
-  auth(UserRole.STUDENT),
-  bookingController.getStudentsBookings,
+  auth(UserRole.STUDENT, UserRole.ADMIN, UserRole.TUTOR),
+  bookingController.getBookings,
 );
 // CANCEL BOOKING by STUDENT
 bookingRouter.put(
@@ -28,9 +28,10 @@ bookingRouter.get(
   auth(UserRole.TUTOR),
   bookingController.getTutorBookings,
 );
-bookingRouter.put(
-  "/tutor/status/:bookingId",
-  auth(UserRole.TUTOR),
+// universal route for updating booking status (CONFIRM/REJECT) by tutor or admin
+bookingRouter.patch(
+  "/status/:bookingId",
+  auth(UserRole.TUTOR, UserRole.STUDENT, UserRole.ADMIN),
   bookingController.updateBookingStatus,
 );
 

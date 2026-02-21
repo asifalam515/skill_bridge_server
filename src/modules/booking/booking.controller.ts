@@ -14,19 +14,45 @@ const createBooking = async (req: Request, res: Response) => {
     res.status(400).json({ error: error.message });
   }
 };
-const getStudentsBookings = async (req: Request, res: Response) => {
+
+const getBookings = async (req: Request, res: Response) => {
   try {
-    const studentId = req.user?.id;
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
     const { status } = req.query;
 
-    if (!studentId) return res.status(401).json({ error: "Unauthorized" });
+    if (!userId || !userRole) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
-    const bookings = await bookingRelatedService.getStudentBookings(
-      studentId,
+    // Optional filters (mainly for admin)
+    const filters: any = {};
+    if (userRole === "ADMIN") {
+      if (req.query.studentId)
+        filters.studentId = req.query.studentId as string;
+      if (req.query.tutorId) filters.tutorId = req.query.tutorId as string;
+      if (req.query.startDate)
+        filters.startDate = new Date(req.query.startDate as string);
+      if (req.query.endDate)
+        filters.endDate = new Date(req.query.endDate as string);
+    }
+
+    const bookings = await bookingRelatedService.getBookings(
+      userId,
+      userRole,
       status as BookingStatus,
+      filters,
     );
+
     res.json(bookings);
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Error fetching bookings:", error);
+
+    // Handle specific errors
+    if (error.message === "Tutor profile not found") {
+      return res.status(404).json({ error: error.message });
+    }
+
     res.status(500).json({ error: "Failed to fetch bookings" });
   }
 };
@@ -55,9 +81,11 @@ const getTutorBookings = async (req: Request, res: Response) => {
 };
 const updateBookingStatus = async (req: Request, res: Response) => {
   try {
-    const bookingId = req.params.bookingId as string;
+    const bookingId = req.params.bookingId;
     const { status } = req.body;
+
     const userId = req.user?.id;
+    const role = req.user?.role;
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
     if (!status) return res.status(400).json({ error: "Status is required" });
@@ -65,8 +93,10 @@ const updateBookingStatus = async (req: Request, res: Response) => {
     const booking = await bookingRelatedService.updateBookingStatus(
       bookingId,
       userId,
+      role!,
       status,
     );
+
     res.json(booking);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -106,7 +136,7 @@ const bookingCompletion = async (req: Request, res: Response) => {
 };
 export const bookingController = {
   createBooking,
-  getStudentsBookings,
+  getBookings,
   getTutorBookings,
   cancelBooking,
   updateBookingStatus,
