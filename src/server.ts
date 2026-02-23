@@ -15,7 +15,6 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000",
-      "https://skill-bridge-server-jqrfwzou6-asibul-alams-projects.vercel.app/",
       "https://api-skillbridge-server.onrender.com",
     ],
     credentials: true,
