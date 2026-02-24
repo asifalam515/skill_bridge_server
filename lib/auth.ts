@@ -23,6 +23,7 @@ export const auth = betterAuth({
         sameSite: "none", // ✅ THIS FIXES YOUR LOGIN
         secure: true,
         httpOnly: true,
+        path: "/",
       },
     },
   },
@@ -52,27 +53,27 @@ export const auth = betterAuth({
     enabled: true,
     origin: ["http://localhost:3000"],
   },
-  advanced: {
-    disableCSRFCheck: true,
-    disableOriginCheck: true,
-    useSecureCookies: false,
-    cookies: {
-      state: {
-        attributes: {
-          sameSite: "none",
-          secure: true,
-          httpOnly: true,
-          path: "/",
-        },
-      },
-      sessionToken: {
-        attributes: {
-          sameSite: "none",
-          secure: true,
-          httpOnly: true,
-          path: "/",
-        },
-      },
-    },
-  },
+  // advanced: {
+  //   disableCSRFCheck: true,
+  //   disableOriginCheck: true,
+  //   useSecureCookies: false,
+  //   cookies: {
+  //     state: {
+  //       attributes: {
+  //         sameSite: "none",
+  //         secure: true,
+  //         httpOnly: true,
+  //         path: "/",
+  //       },
+  //     },
+  //     sessionToken: {
+  //       attributes: {
+  //         sameSite: "none",
+  //         secure: true,
+  //         httpOnly: true,
+  //         path: "/",
+  //       },
+  //     },
+  //   },
+  // },
 });
