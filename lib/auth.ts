@@ -17,11 +17,14 @@ export const auth = betterAuth({
     ],
     credentials: true, // allow cookies to be sent
   },
-
   cookies: {
-    secure: true,
-    sameSite: "none",
-    httpOnly: true,
+    sessionToken: {
+      attributes: {
+        sameSite: "none", // ✅ THIS FIXES YOUR LOGIN
+        secure: true,
+        httpOnly: true,
+      },
+    },
   },
   socialProviders: {
     google: {
