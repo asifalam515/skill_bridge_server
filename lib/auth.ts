@@ -11,10 +11,17 @@ export const auth = betterAuth({
     process.env.BETTER_AUTH_URL ||
     "https://api-skillbridge-server.onrender.com",
   secret: process.env.BETTER_AUTH_SECRET,
+  cors: {
+    origin: [
+      process.env.FRONTEND_URL || "http://localhost:3000", // your frontend domain
+    ],
+    credentials: true, // allow cookies to be sent
+  },
 
   cookies: {
     secure: true,
     sameSite: "none",
+    httpOnly: true,
   },
   socialProviders: {
     google: {
@@ -23,7 +30,7 @@ export const auth = betterAuth({
     },
   },
 
-  trustedOrigins: ["*"],
+  trustedOrigins: ["http://localhost:3000"],
   user: {
     additionalFields: {
       role: {
