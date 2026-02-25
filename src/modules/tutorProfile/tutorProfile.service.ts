@@ -71,10 +71,10 @@ interface TutorFilters {
 const getAllTutorProfiles = async (filters: TutorFilters) => {
   const {
     search,
-    categoryIds,
-    minRating = 0,
+    categoryIds = [],
+    minRating,
     maxPrice,
-    minPrice = 0,
+    minPrice,
     isFeatured,
     isVerified,
     page = 1,
@@ -85,9 +85,16 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
 
   const skip = (page - 1) * limit;
 
-  // Build WHERE clause
   const conditions: any[] = [];
-  // Search in bio OR user name
+
+  // // 🔹 Always ensure tutor has at least one category
+  // conditions.push({
+  //   categories: {
+  //     some: {},
+  //   },
+  // });
+
+  // 🔹 Search
   if (search) {
     conditions.push({
       OR: [
@@ -97,8 +104,8 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
     });
   }
 
-  // Filter by categories
-  if (categoryIds && categoryIds.length > 0) {
+  // 🔹 Category filter
+  if (categoryIds.length > 0) {
     conditions.push({
       categories: {
         some: {
@@ -108,61 +115,42 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
     });
   }
 
-  // Filter by rating
-  if (minRating > 0) {
+  // 🔹 Rating filter
+  if (minRating !== undefined) {
     conditions.push({
       rating: { gte: minRating },
     });
   }
 
-  // Filter by price range
-  const priceConditions: any[] = [];
-
-  if (minPrice > 0) {
-    priceConditions.push({ pricePerHr: { gte: minPrice } });
-  }
-
-  if (maxPrice) {
-    priceConditions.push({ pricePerHr: { lte: maxPrice } });
-  }
-
-  if (priceConditions.length > 0) {
+  // 🔹 Price filter (fixed version)
+  if (minPrice !== undefined || maxPrice !== undefined) {
     conditions.push({
-      AND: priceConditions,
+      pricePerHr: {
+        gte: minPrice ?? 0,
+        lte: maxPrice ?? Number.MAX_SAFE_INTEGER,
+      },
     });
   }
 
-  // Filter by verification status
+  // 🔹 Flags
   if (isVerified !== undefined) {
     conditions.push({ isVerified });
   }
+
   if (isFeatured !== undefined) {
     conditions.push({ isFeatured });
   }
-  const where = conditions.length > 0 ? { AND: conditions } : {};
-  // If no conditions, remove AND wrapper
-  if (conditions.length === 0) {
-    delete where.AND;
-  }
 
-  // Get total count for pagination
+  const where = { AND: conditions };
+
+  // 🔹 Total count
   const total = await prisma.tutorProfile.count({ where });
 
-  // Build ORDER BY
+  // 🔹 Sorting
   const orderBy: any = {};
-  if (
-    sortBy === "pricePerHr" ||
-    sortBy === "rating" ||
-    sortBy === "experience" ||
-    sortBy === "createdAt"
-  ) {
-    orderBy[sortBy] = sortOrder;
-  } else {
-    // Default sorting by rating descending
-    orderBy.rating = "desc";
-  }
+  orderBy[sortBy] = sortOrder;
 
-  // Fetch tutors with pagination
+  // 🔹 Fetch tutors
   const tutorsProfile = await prisma.tutorProfile.findMany({
     where,
     include: {
@@ -180,7 +168,7 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
         },
       },
       reviews: {
-        take: 3, // Get 3 most recent reviews
+        take: 3,
         orderBy: { createdAt: "desc" },
         include: {
           student: {
@@ -194,16 +182,14 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
       availability: {
         where: {
           isBooked: false,
-          startTime: { gt: new Date() }, // Only future available slots
+          startTime: { gt: new Date() },
         },
-        take: 5, // Show first 5 available slots
+        take: 5,
       },
       _count: {
         select: {
           reviews: true,
-          bookings: {
-            where: { status: "COMPLETED" },
-          },
+          bookings: { where: { status: "COMPLETED" } },
         },
       },
     },
@@ -212,7 +198,7 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
     take: limit,
   });
 
-  // Format response
+  // 🔹 Format response
   const formattedTutors = tutorsProfile.map((tutor) => ({
     id: tutor.id,
     name: tutor.user.name,
@@ -225,13 +211,11 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
     isVerified: tutor.isVerified,
     createdAt: tutor.createdAt,
 
-    // Categories
     categories: tutor.categories.map((c) => ({
       id: c.category.id,
       name: c.category.name,
     })),
 
-    // Recent reviews
     recentReviews: tutor.reviews.map((review) => ({
       id: review.id,
       rating: review.rating,
@@ -241,11 +225,9 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
       studentImage: review.student.image,
     })),
 
-    // Statistics
     totalReviews: tutor._count.reviews,
     completedSessions: tutor._count.bookings,
 
-    // Availability
     availableSlots: tutor.availability.length,
     nextAvailableSlot:
       tutor.availability.length > 0 ? tutor.availability[0]?.startTime : null,
@@ -260,27 +242,6 @@ const getAllTutorProfiles = async (filters: TutorFilters) => {
       totalPages: Math.ceil(total / limit),
       hasNextPage: page * limit < total,
       hasPrevPage: page > 1,
-    },
-    filters: {
-      applied: {
-        search,
-        categories: categoryIds,
-        minRating,
-        minPrice,
-        maxPrice,
-        isVerified,
-      },
-      available: {
-        // You could add available filter ranges here
-        minRating: 0,
-        maxRating: 5,
-        minPrice: 0,
-        maxPrice: await prisma.tutorProfile
-          .aggregate({
-            _max: { pricePerHr: true },
-          })
-          .then((result) => result._max.pricePerHr || 100),
-      },
     },
   };
 };

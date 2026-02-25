@@ -3,6 +3,7 @@ import { tutorProfileService } from "./tutorProfile.service";
 const createTutorProfile = async (req: Request, res: Response) => {
   try {
     const tutorProfileData = req.body;
+
     const userId = req.user?.id as string;
 
     if (req.user?.role != "TUTOR") {
@@ -23,49 +24,71 @@ const createTutorProfile = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
-const getAllTutorProfiles = async (req: Request, res: Response) => {
+export const getAllTutorProfiles = async (req: Request, res: Response) => {
   try {
-    // Parse query parameters
     const search = req.query.search as string | undefined;
-    const category = req.query.category as string | undefined;
+
+    // ✅ CategoryIds (fixed)
+    const categoryParam = req.query.categoryIds;
+    let categoryIds: string[] = [];
+
+    if (Array.isArray(categoryParam)) {
+      categoryIds = categoryParam;
+    } else if (typeof categoryParam === "string") {
+      categoryIds = [categoryParam];
+    }
+
     const minRating = req.query.minRating
       ? parseFloat(req.query.minRating as string)
       : undefined;
+
     const maxPrice = req.query.maxPrice
       ? parseFloat(req.query.maxPrice as string)
       : undefined;
+
     const minPrice = req.query.minPrice
       ? parseFloat(req.query.minPrice as string)
       : undefined;
+
     const isVerified =
       req.query.isVerified === "true"
         ? true
         : req.query.isVerified === "false"
           ? false
           : undefined;
+
     const isFeatured =
       req.query.isFeatured === "true"
         ? true
         : req.query.isFeatured === "false"
           ? false
           : undefined;
+
     // Pagination
     const page = req.query.page ? parseInt(req.query.page as string) : 1;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
 
-    // Sorting
-    const sortBy = req.query.sortBy as
-      | "rating"
-      | "pricePerHr"
-      | "experience"
-      | "createdAt"
-      | undefined;
-    const sortOrder = req.query.sortOrder as "asc" | "desc" | undefined;
+    // ✅ Sorting mapper (frontend friendly)
+    let sortBy: any = "rating";
+    let sortOrder: "asc" | "desc" = "desc";
 
-    // Parse categories array
-    const categoryIds = category ? category.split(",") : [];
+    const sortParam = req.query.sortBy as string | undefined;
 
-    const tutorsProfile = await tutorProfileService.getAllTutorProfiles({
+    if (sortParam === "price_low") {
+      sortBy = "pricePerHr";
+      sortOrder = "asc";
+    } else if (sortParam === "price_high") {
+      sortBy = "pricePerHr";
+      sortOrder = "desc";
+    } else if (sortParam === "experience") {
+      sortBy = "experience";
+      sortOrder = "desc";
+    } else if (sortParam === "newest") {
+      sortBy = "createdAt";
+      sortOrder = "desc";
+    }
+
+    const result = await tutorProfileService.getAllTutorProfiles({
       search,
       categoryIds,
       minRating,
@@ -79,7 +102,7 @@ const getAllTutorProfiles = async (req: Request, res: Response) => {
       sortOrder,
     });
 
-    res.status(200).json(tutorsProfile);
+    res.status(200).json(result);
   } catch (error) {
     console.error("Error fetching tutor profiles:", error);
     res.status(500).json({ error: "Internal server error" });
