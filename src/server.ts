@@ -5,6 +5,7 @@ import http from "http";
 import path from "path";
 import { Server } from "socket.io";
 import { adminRouter } from "./modules/admin/admin.router";
+import { analyticsRouter } from "./modules/analytics/analytics.router";
 import { AuthRouter } from "./modules/Auth/auth.router";
 import { slotRouter } from "./modules/availabilitySlot/slot.router";
 import { bookingRouter } from "./modules/booking/booking.router";
@@ -68,6 +69,8 @@ app.use("/api/v1/profile", profileRouter);
 app.use("/api/v1/lesson-plans", lessonPlanRouter);
 // resume builder router (AI-powered tutor bio enhancement)
 app.use("/api/v1/resume-builder", resumeBuilderRouter);
+// analytics / global stats
+app.use("/api/v1/analytics", analyticsRouter);
 app.get("/", (req, res) => {
   res.send("API is running");
 });
