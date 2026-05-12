@@ -1,7 +1,7 @@
 // src/server.ts
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import express4 from "express";
+import express6 from "express";
 import http from "http";
 import path3 from "path";
 import { Server } from "socket.io";
@@ -817,8 +817,49 @@ adminRouter.put(
   adminController.updateBookingStatus
 );
 
-// src/modules/Auth/auth.router.ts
+// src/modules/analytics/analytics.router.ts
 import express from "express";
+
+// src/modules/analytics/analytics.service.ts
+var analyticsService = {
+  async getGlobalStats() {
+    const activeTutors = await prisma.tutorProfile.count({
+      where: { user: { status: UserStatus.ACTIVE } }
+    });
+    const sessionsBooked = await prisma.booking.count({
+      where: { status: { not: BookingStatus.CANCELLED } }
+    });
+    const avgAgg = await prisma.review.aggregate({ _avg: { rating: true } });
+    const avgRating = Number((avgAgg._avg.rating ?? 0).toFixed(1));
+    const totalReviews = await prisma.review.count();
+    return {
+      activeTutors,
+      sessionsBooked,
+      avgRating,
+      totalReviews
+    };
+  }
+};
+
+// src/modules/analytics/analytics.controller.ts
+var analyticsController = {
+  async getGlobalStats(req, res) {
+    try {
+      const stats = await analyticsService.getGlobalStats();
+      return res.json({ analytics: stats });
+    } catch (err) {
+      console.error("analytics.getGlobalStats error:", err);
+      return res.status(500).json({ message: err?.message ?? "Internal error" });
+    }
+  }
+};
+
+// src/modules/analytics/analytics.router.ts
+var analyticsRouter = express.Router();
+analyticsRouter.get("/", analyticsController.getGlobalStats);
+
+// src/modules/Auth/auth.router.ts
+import express2 from "express";
 
 // src/utils/sendResponse.ts
 var sendResponse = (res, data) => {
@@ -880,7 +921,7 @@ var AuthController = {
 };
 
 // src/modules/Auth/auth.router.ts
-var AuthRouter = express.Router();
+var AuthRouter = express2.Router();
 AuthRouter.post("/register", AuthController.createUser);
 AuthRouter.post("/login", AuthController.loginUser);
 
@@ -2904,7 +2945,7 @@ invoiceRouter.get(
 );
 
 // src/modules/lessonPlan/lesson-plan.router.ts
-import express2 from "express";
+import express3 from "express";
 
 // src/modules/lessonPlan/lesson-plan.service.ts
 var callGroqForLessonPlan = async (goal, weeks, studentLevel = "intermediate", tutorExpertise) => {
@@ -3341,7 +3382,7 @@ var lessonPlanController = {
 };
 
 // src/modules/lessonPlan/lesson-plan.router.ts
-var lessonPlanRouter = express2.Router();
+var lessonPlanRouter = express3.Router();
 lessonPlanRouter.post("/generate", lessonPlanController.generateLessonPlan);
 lessonPlanRouter.get("/:planId", lessonPlanController.getLessonPlan);
 lessonPlanRouter.get(
@@ -3742,7 +3783,7 @@ profileRouter.patch(
 profileRouter.patch("/availability", auth_default("TUTOR" /* tutor */), updateAvailability);
 
 // src/modules/resumeBuilder/resume-builder.router.ts
-import express3 from "express";
+import express4 from "express";
 
 // src/modules/resumeBuilder/resume-builder.service.ts
 var parseJsonResponse = (content) => {
@@ -3941,7 +3982,7 @@ var resumeBuilderController = {
 };
 
 // src/modules/resumeBuilder/resume-builder.router.ts
-var resumeBuilderRouter = express3.Router();
+var resumeBuilderRouter = express4.Router();
 resumeBuilderRouter.post(
   "/enhance",
   auth_default("TUTOR" /* tutor */),
@@ -4098,6 +4139,371 @@ var reviewController = {
 // src/modules/review/review.router.ts
 var reviewRouter = Router8();
 reviewRouter.post("/", auth_default("STUDENT" /* student */), reviewController.createReview);
+
+// src/modules/smartMatch/smartMatch.router.ts
+import express5 from "express";
+
+// src/modules/smartMatch/smartMatch.service.ts
+var getAllTutorsForMatching = async () => {
+  const tutors = await prisma.tutorProfile.findMany({
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          banned: true,
+          status: true
+        }
+      },
+      categories: {
+        include: {
+          category: true
+        }
+      },
+      reviews: {
+        take: 5,
+        // Get last 5 reviews for context
+        orderBy: { createdAt: "desc" },
+        include: {
+          student: {
+            select: {
+              name: true
+            }
+          }
+        }
+      }
+    },
+    where: {
+      user: {
+        banned: false,
+        status: "ACTIVE"
+      }
+    }
+  });
+  return tutors.filter((tutor) => tutor.categories.length > 0);
+};
+var callGroqAPI = async (studentGoal, tutorsData) => {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY environment variable not set");
+  }
+  const formatTutorForResponse2 = (tutor) => ({
+    id: tutor.id,
+    userId: tutor.userId,
+    bio: tutor.bio,
+    pricePerHr: tutor.pricePerHr,
+    rating: tutor.rating,
+    experience: tutor.experience,
+    isVerified: tutor.isVerified,
+    isFeatured: tutor.isFeatured,
+    user: tutor.user,
+    categories: tutor.categories.map((tc) => tc.category),
+    reviews: tutor.reviews
+  });
+  const startTime = Date.now();
+  const tutorInfos = tutorsData.map((tutor, index) => {
+    const categories = tutor.categories.map((tc) => tc.category.name).join(", ");
+    const avgRating = tutor.reviews.length > 0 ? (tutor.reviews.reduce((sum, r) => sum + r.rating, 0) / tutor.reviews.length).toFixed(1) : "No ratings";
+    const reviewsSummary = tutor.reviews.length > 0 ? tutor.reviews.map(
+      (r) => `\u2022 ${r.student.name}: ${r.rating}\u2605 - "${r.comment || "Great tutor"}"`
+    ).join("\n") : "\u2022 No reviews yet";
+    return `
+\u3010 TUTOR #${index + 1} \u3011
+\u{1F464} Name: ${tutor.user.name}
+\u{1F4DD} Bio: "${tutor.bio}"
+\u{1F393} Categories: ${categories}
+\u23F1\uFE0F  Experience: ${tutor.experience} years
+\u{1F4B0} Price: $${tutor.pricePerHr}/hour
+\u2B50 Rating: ${avgRating}/5 (${tutor.reviews.length} reviews)
+\u2713 Verified: ${tutor.isVerified ? "\u2705 YES" : "\u274C NO"}
+\u2B50 Featured: ${tutor.isFeatured ? "\u{1F31F} YES" : "NO"}
+
+Student Reviews:
+${reviewsSummary}
+
+---`;
+  }).join("\n");
+  const prompt = `You are an ELITE tutor recommendation engine with expertise in learning science and pedagogy.
+
+STUDENT'S LEARNING OBJECTIVE:
+"${studentGoal}"
+
+YOUR TASK:
+Analyze the following tutor profiles and identify the TOP 3 BEST MATCHES for this student. Prioritize:
+1. Direct category/skill relevance to the goal
+2. Teaching quality (ratings + review sentiment)
+3. Experience depth relevant to the goal complexity
+4. Student success indicators (verified badge, reviews)
+5. Teaching approach fit
+
+AVAILABLE TUTORS:
+${tutorInfos}
+
+CRITICAL REQUIREMENTS:
+- Return ONLY valid JSON (no markdown, explanations, or extra text)
+- matchScore must be 0-100 (confidence in match)
+- reason must be compelling and specific (2-3 sentences max)
+- keywords should be 2-3 learning concepts
+
+RESPONSE FORMAT (EXACT JSON):
+{
+  "matches": [
+    {
+      "tutorId": "uuid-string-here",
+      "matchScore": 90,
+      "reason": "Specific reason why this tutor matches the goal perfectly",
+      "keywords": ["concept1", "concept2", "concept3"],
+      "matchRationale": "One sentence explaining the pedagogical fit"
+    }
+  ],
+  "alternativeRecommendations": "Brief tip for the student on how to maximize learning"
+}`;
+  try {
+    const response = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            {
+              role: "system",
+              content: "You are an expert tutor matching AI. Respond ONLY with valid JSON."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 1500,
+          top_p: 0.9
+        })
+      }
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      console.error("Groq API error:", error);
+      throw new Error(`Groq API error: ${response.status}`);
+    }
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content || "";
+    const responseTime = Date.now() - startTime;
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("Could not parse AI response as JSON");
+    }
+    const parsed = JSON.parse(jsonMatch[0]);
+    parsed.responseTime = responseTime;
+    return parsed;
+  } catch (error) {
+    console.error("Error calling Groq API:", error);
+    throw error;
+  }
+};
+var findSmartMatches = async (studentGoal) => {
+  if (!studentGoal || studentGoal.trim().length < 5) {
+    throw new Error("Student goal must be at least 5 characters long");
+  }
+  const tutors = await getAllTutorsForMatching();
+  if (tutors.length === 0) {
+    throw new Error("No tutors available for matching");
+  }
+  const aiRecommendations = await callGroqAPI(studentGoal, tutors);
+  const enrichedMatches = aiRecommendations.matches.map((match) => {
+    const tutorData = tutors.find((t) => t.id === match.tutorId);
+    return {
+      ...match,
+      tutor: tutorData ? formatTutorForResponse(tutorData) : null
+    };
+  });
+  return {
+    studentGoal,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    recommendations: enrichedMatches,
+    alternativeRecommendations: aiRecommendations.alternativeRecommendations,
+    totalTutorsAnalyzed: tutors.length,
+    responseTime: aiRecommendations.responseTime,
+    aiProvider: "groq"
+  };
+};
+var findSimpleMatches = async (studentGoal) => {
+  const tutors = await getAllTutorsForMatching();
+  if (tutors.length === 0) {
+    throw new Error("No tutors available for matching");
+  }
+  const goalKeywords = studentGoal.toLowerCase().split(/\s+/);
+  const scoredTutors = tutors.map((tutor) => {
+    let score = 0;
+    const tutorCategories = tutor.categories.map((tc) => tc.category.name.toLowerCase()).join(" ");
+    goalKeywords.forEach((keyword) => {
+      if (tutorCategories.includes(keyword)) score += 30;
+    });
+    score += tutor.rating * 10;
+    score += Math.min(tutor.experience * 2, 20);
+    if (tutor.isVerified) score += 15;
+    return {
+      tutorId: tutor.id,
+      score,
+      tutor: {
+        ...formatTutorForResponse(tutor)
+      }
+    };
+  });
+  const topMatches = scoredTutors.sort((a, b) => b.score - a.score).slice(0, 3).map(({ score, tutor }) => ({
+    tutorId: tutor.id,
+    matchScore: Math.min(score, 100),
+    reason: `Category relevance: ${tutor.categories.join(", ")} | Rating: ${tutor.rating}/5 | Experience: ${tutor.experience}y`,
+    tutor
+  }));
+  return {
+    studentGoal,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    recommendations: topMatches,
+    alternativeRecommendations: "Using keyword-based matching. More detailed AI analysis may be available.",
+    totalTutorsAnalyzed: tutors.length,
+    method: "fallback"
+  };
+};
+var smartMatchService = {
+  findSmartMatches,
+  findSimpleMatches,
+  getAllTutorsForMatching,
+  callGroqAPI
+};
+
+// src/modules/smartMatch/smartMatch.controller.ts
+var serializeTutor = (tutor) => ({
+  id: tutor.id,
+  userId: tutor.userId,
+  bio: tutor.bio,
+  pricePerHr: tutor.pricePerHr,
+  rating: tutor.rating,
+  experience: tutor.experience,
+  isVerified: tutor.isVerified,
+  isFeatured: tutor.isFeatured,
+  user: tutor.user,
+  categories: tutor.categories.map((tc) => tc.category),
+  reviews: tutor.reviews
+});
+var findMatches = async (req, res) => {
+  try {
+    const { goal } = req.body;
+    if (!goal) {
+      res.status(400).json({
+        success: false,
+        message: "Learning goal is required",
+        code: "MISSING_GOAL"
+      });
+      return;
+    }
+    try {
+      const matches = await smartMatchService.findSmartMatches(goal);
+      res.status(200).json({
+        success: true,
+        data: matches,
+        metadata: {
+          aiProvider: "groq",
+          responseTimeMs: matches.responseTime,
+          cached: false
+        }
+      });
+    } catch (aiError) {
+      console.warn("Groq AI matching failed, using fallback:", aiError.message);
+      const matches = await smartMatchService.findSimpleMatches(goal);
+      res.status(200).json({
+        success: true,
+        data: matches,
+        metadata: {
+          aiProvider: "fallback",
+          fallbackReason: aiError.message
+        },
+        warning: "Using keyword-based matching. AI analysis temporarily unavailable."
+      });
+    }
+  } catch (error) {
+    console.error("Error in findMatches:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to find tutor matches",
+      code: "MATCHING_ERROR"
+    });
+  }
+};
+var getDetailedMatches = async (req, res) => {
+  try {
+    const { goal, limit = 5 } = req.body;
+    if (!goal) {
+      res.status(400).json({
+        success: false,
+        message: "Learning goal is required"
+      });
+      return;
+    }
+    const tutors = await smartMatchService.getAllTutorsForMatching();
+    if (tutors.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "No tutors available"
+      });
+      return;
+    }
+    const categorizedTutors = {};
+    tutors.forEach((tutor) => {
+      tutor.categories.forEach((tc) => {
+        const categoryName = tc.category.name;
+        if (!categorizedTutors[categoryName]) {
+          categorizedTutors[categoryName] = [];
+        }
+        categorizedTutors[categoryName].push(tutor);
+      });
+    });
+    const detailedRecommendations = Object.entries(categorizedTutors).map(
+      ([category, categoryTutors]) => {
+        const topInCategory = categoryTutors.sort((a, b) => b.rating - a.rating).slice(0, Math.min(3, limit)).map((tutor) => serializeTutor(tutor));
+        return {
+          category,
+          topTutors: topInCategory
+        };
+      }
+    );
+    res.status(200).json({
+      success: true,
+      data: {
+        goal,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        byCategory: detailedRecommendations,
+        totalTutors: tutors.length,
+        categoriesCount: Object.keys(categorizedTutors).length
+      },
+      metadata: {
+        responseType: "category-based",
+        analysisTier: "premium"
+      }
+    });
+  } catch (error) {
+    console.error("Error in getDetailedMatches:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to get detailed matches"
+    });
+  }
+};
+var smartMatchController = {
+  findMatches,
+  getDetailedMatches
+};
+
+// src/modules/smartMatch/smartMatch.router.ts
+var smartMatchRouter = express5.Router();
+smartMatchRouter.post("/", smartMatchController.findMatches);
+smartMatchRouter.post("/detailed", smartMatchController.getDetailedMatches);
 
 // src/modules/tutorCategories/categories.route.ts
 import { Router as Router9 } from "express";
@@ -4638,7 +5044,7 @@ tutorProfileRouter.delete(
 );
 
 // src/server.ts
-var app = express4();
+var app = express6();
 var port = process.env.PORT || 5e3;
 var allowedOrigins = [
   "https://skill-bridge-4216.vercel.app",
@@ -4651,9 +5057,9 @@ app.use(
     credentials: true
   })
 );
-app.use(express4.json());
+app.use(express6.json());
 app.use(cookieParser());
-app.use("/uploads", express4.static(path3.join(process.cwd(), "uploads")));
+app.use("/uploads", express6.static(path3.join(process.cwd(), "uploads")));
 app.get("/", (req, res) => {
   res.send("skillBridge project started!");
 });
@@ -4668,8 +5074,10 @@ app.use("/api/v1/invoices", invoiceRouter);
 app.use("/api/v1/reviews", reviewRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/profile", profileRouter);
+app.use("/api/v1/smart-match", smartMatchRouter);
 app.use("/api/v1/lesson-plans", lessonPlanRouter);
 app.use("/api/v1/resume-builder", resumeBuilderRouter);
+app.use("/api/v1/analytics", analyticsRouter);
 app.get("/", (req, res) => {
   res.send("API is running");
 });
